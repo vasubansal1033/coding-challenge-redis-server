@@ -15,11 +15,19 @@ func handleConnection(c net.Conn) {
 	defer c.Close()
 	log.Printf("Accepted connection from %s", c.RemoteAddr())
 
-	_, err := c.Write([]byte("+PONG\r\n"))
+	for {
+		_, err := c.Read(make([]byte, 128))
+		if err != nil {
+			logAndThrowError(err, "Error while reading request\n")
+		}
 
-	if err != nil {
-		logAndThrowError(err, "Error while writing response\n")
+		_, err = c.Write([]byte("+PONG\r\n"))
+
+		if err != nil {
+			logAndThrowError(err, "Error while writing response\n")
+		}
 	}
+
 }
 
 func main() {
