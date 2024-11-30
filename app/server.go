@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 )
 
 const (
@@ -12,23 +11,37 @@ const (
 	REDIS_PORT = 6379
 )
 
+func handleConnection(c net.Conn) {
+	defer c.Close()
+	log.Printf("Accepted connection from %s", c.RemoteAddr())
+
+	_, err := c.Write([]byte("+PONG\r\n"))
+
+	if err != nil {
+		logAndThrowError(err, "Error while writing response\n")
+	}
+}
+
 func main() {
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", REDIS_HOST, REDIS_PORT))
+	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, REDIS_PORT)
+	l, err := net.Listen("tcp", listenAddress)
 	if err != nil {
 		logAndThrowError(err, fmt.Sprintf("Failed to bind to port: %d", REDIS_PORT))
 	}
 
 	log.Printf("Listening on port: %d", REDIS_PORT)
 
-	_, err = l.Accept()
-	if err != nil {
-		logAndThrowError(err, "Error accepting connection")
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			logAndThrowError(err, "Error accepting connection")
+		}
+
+		go handleConnection(c)
 	}
-	
-	log.Printf("Accepted connection. Now listening on port: %d", REDIS_PORT)
+
 }
 
 func logAndThrowError(err error, errorMessage string) {
 	log.Fatalf("%s: %v", errorMessage, err)
-	os.Exit(1)
 }
