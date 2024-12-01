@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -17,6 +18,7 @@ const (
 	REDIS_HOST       = "0.0.0.0"
 	REDIS_PORT       = 6379
 	REDIS_CLI_PROMPT = "$ redis-cli > "
+	ALPHANUMERIC_SET = "abcdefghijklmnopqrstuvwxyz0123456789"
 )
 
 var handlers = map[string]func(Command) []byte{
@@ -28,11 +30,15 @@ var handlers = map[string]func(Command) []byte{
 }
 
 type ServerConfig struct {
-	Role string `json:"role"`
+	Role                string `json:"role"`
+	MasterReplicaId     string `json:"masterReplicaId"`
+	MasterReplicaOffset int    `json:"masterReplicaOffset"`
 }
 
 var serverConfig = ServerConfig{
-	Role: "master",
+	Role:                "master",
+	MasterReplicaId:     generateRandomString(40),
+	MasterReplicaOffset: 0,
 }
 
 var kvStore map[string]string = make(map[string]string)
@@ -41,12 +47,6 @@ func handleConnection(c net.Conn) {
 	defer c.Close()
 
 	for {
-		// _, err := c.Write([]byte(REDIS_CLI_PROMPT))
-		// if err != nil {
-		// 	log.Printf("Error while writing to client: %s", c.RemoteAddr())
-		// 	return
-		// }
-
 		buf := make([]byte, 1024)
 		_, err := c.Read(buf)
 		if err != nil {
@@ -170,8 +170,21 @@ func handleInfo(cmd Command) []byte {
 	fmt.Println("handle info")
 
 	if cmd.args[0] == "replication" {
-		return ToBulkString(fmt.Sprintf("role:%s", serverConfig.Role))
+		infoOutput := fmt.Sprintf("role:%s", serverConfig.Role)
+		infoOutput += fmt.Sprintf(":master_replid:%s", serverConfig.MasterReplicaId)
+		infoOutput += fmt.Sprintf(":master_repl_offset:%d", serverConfig.MasterReplicaOffset)
+		return ToBulkString(infoOutput)
 	}
 
 	return ToBulkString("unsupported argument")
+}
+
+func generateRandomString(length int) string {
+	result := make([]byte, length)
+
+	for i := 0; i < length; i++ {
+		result[i] = ALPHANUMERIC_SET[rand.Intn(len(ALPHANUMERIC_SET))]
+	}
+
+	return string(result)
 }
