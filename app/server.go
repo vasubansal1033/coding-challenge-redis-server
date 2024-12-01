@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"os"
+	"syscall"
 )
 
 const (
@@ -13,12 +16,21 @@ const (
 
 func handleConnection(c net.Conn) {
 	defer c.Close()
-	log.Printf("Accepted connection from %s", c.RemoteAddr())
 
 	for {
 		_, err := c.Read(make([]byte, 128))
 		if err != nil {
-			logAndThrowError(err, "Error while reading request\n")
+			if err == io.EOF {
+				log.Printf("Client closed connection: %s", c.RemoteAddr())
+				return
+			}
+			if isConnectionResetError(err) {
+				log.Printf("Connection reset by client: %s", c.RemoteAddr())
+				return
+			}
+
+			log.Printf("Error while reading from %s: %v", c.RemoteAddr(), err)
+			return
 		}
 
 		_, err = c.Write([]byte("+PONG\r\n"))
@@ -45,6 +57,7 @@ func main() {
 			logAndThrowError(err, "Error accepting connection")
 		}
 
+		log.Printf("Accepted connection from %s", c.RemoteAddr())
 		go handleConnection(c)
 	}
 
@@ -52,4 +65,15 @@ func main() {
 
 func logAndThrowError(err error, errorMessage string) {
 	log.Fatalf("%s: %v", errorMessage, err)
+}
+
+func isConnectionResetError(err error) bool {
+	// Check if the error is a network error
+	if nErr, ok := err.(*net.OpError); ok {
+		// Check for syscall errors in the underlying cause
+		if errno, ok := nErr.Err.(*os.SyscallError).Err.(syscall.Errno); ok {
+			return errno == syscall.ECONNRESET
+		}
+	}
+	return false
 }
