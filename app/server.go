@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -74,13 +75,17 @@ func handleConnection(c net.Conn) {
 }
 
 func main() {
-	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, REDIS_PORT)
+
+	redisPort := flag.Int("port", REDIS_PORT, "port on which redis server will run")
+	flag.Parse()
+
+	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, *redisPort)
 	l, err := net.Listen("tcp", listenAddress)
 	if err != nil {
-		logAndThrowError(err, fmt.Sprintf("Failed to bind to port: %d", REDIS_PORT))
+		logAndThrowError(err, fmt.Sprintf("Failed to bind to port: %d", *redisPort))
 	}
 
-	log.Printf("Listening on port: %d", REDIS_PORT)
+	log.Printf("Listening on port: %d", *redisPort)
 
 	defer l.Close()
 	for {
