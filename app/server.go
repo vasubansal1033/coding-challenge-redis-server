@@ -22,18 +22,19 @@ const (
 )
 
 var handlers = map[string]func(Command) []byte{
-	"PING": handlePing,
-	"ECHO": handleEcho,
-	"GET":  handleGet,
-	"SET":  handleSet,
-	"INFO": handleInfo,
+	"PING":     handlePing,
+	"ECHO":     handleEcho,
+	"GET":      handleGet,
+	"SET":      handleSet,
+	"INFO":     handleInfo,
+	"REPLCONF": handleReplConf,
 }
 
 type ServerConfig struct {
 	Role                string `json:"role"`
 	MasterReplicaId     string `json:"masterReplicaId"`
 	MasterReplicaOffset int    `json:"masterReplicaOffset"`
-	MasterHost          string `json:masterHost`
+	MasterHost          string `json:"masterHost"`
 	MasterPort          int    `json:"masterPort"`
 	ListeningPort       int    `json:"listeningPort"`
 }
@@ -193,6 +194,12 @@ func handleInfo(cmd Command) []byte {
 	}
 
 	return ToBulkString("unsupported argument")
+}
+
+func handleReplConf(cmd Command) []byte {
+	fmt.Println("handle replconf")
+
+	return ToBulkString("OK")
 }
 
 func generateRandomString(length int) string {
