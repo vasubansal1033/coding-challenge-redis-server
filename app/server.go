@@ -19,7 +19,11 @@ const (
 var handlers = map[string]func(Command) []byte{
 	"PING": handlePing,
 	"ECHO": handleEcho,
+	"GET":  handleGet,
+	"SET":  handleSet,
 }
+
+var kvStore map[string]string = make(map[string]string)
 
 func handleConnection(c net.Conn) {
 	defer c.Close()
@@ -112,4 +116,22 @@ func handlePing(cmd Command) []byte {
 func handleEcho(cmd Command) []byte {
 	fmt.Println("handle echo")
 	return ToBulkString(cmd.args[0])
+}
+
+func handleSet(cmd Command) []byte {
+	fmt.Println("handle set")
+	kvStore[cmd.args[0]] = cmd.args[1]
+
+	return ToBulkString("OK")
+}
+
+func handleGet(cmd Command) []byte {
+	fmt.Println("handle get")
+
+	val, ok := kvStore[cmd.args[0]]
+	if !ok {
+		return []byte("$-1\r\n")
+	}
+
+	return ToBulkString(val)
 }
