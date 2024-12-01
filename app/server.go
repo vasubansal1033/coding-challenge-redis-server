@@ -24,6 +24,7 @@ var handlers = map[string]func(Command) []byte{
 	"ECHO": handleEcho,
 	"GET":  handleGet,
 	"SET":  handleSet,
+	"INFO": handleInfo,
 }
 
 var kvStore map[string]string = make(map[string]string)
@@ -150,4 +151,14 @@ func handleGet(cmd Command) []byte {
 	}
 
 	return ToBulkString(val)
+}
+
+func handleInfo(cmd Command) []byte {
+	fmt.Println("handle info")
+
+	if cmd.args[0] == "replication" {
+		return ToBulkString("role:master")
+	}
+
+	return ToBulkString("unsupported argument")
 }
