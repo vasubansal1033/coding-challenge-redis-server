@@ -145,3 +145,7 @@ func ToArray(data []string) []byte {
 
 	return result
 }
+func ToSimpleString(data string) []byte {
+	simpleString := fmt.Sprintf("+%s\r\n", data)
+	return []byte(simpleString)
+}

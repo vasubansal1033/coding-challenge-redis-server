@@ -28,6 +28,7 @@ var handlers = map[string]func(Command) []byte{
 	"SET":      handleSet,
 	"INFO":     handleInfo,
 	"REPLCONF": handleReplConf,
+	"PSYNC":    handlePsync,
 }
 
 type ServerConfig struct {
@@ -169,7 +170,7 @@ func handleSet(cmd Command) []byte {
 		}
 	}
 
-	return ToBulkString("OK")
+	return ToSimpleString("OK")
 }
 
 func handleGet(cmd Command) []byte {
@@ -199,7 +200,13 @@ func handleInfo(cmd Command) []byte {
 func handleReplConf(cmd Command) []byte {
 	fmt.Println("handle replconf")
 
-	return ToBulkString("OK")
+	return ToSimpleString("OK")
+}
+
+func handlePsync(cmd Command) []byte {
+	fmt.Println("handle psync")
+
+	return []byte(ToSimpleString(fmt.Sprintf("FULLRESYNC %s %d", serverConfig.MasterReplicaId, serverConfig.MasterReplicaOffset)))
 }
 
 func generateRandomString(length int) string {
