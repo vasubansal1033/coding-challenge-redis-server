@@ -214,7 +214,8 @@ func sendHandshakeToMaster() {
 
 	buf := make([]byte, 1024)
 
-	m.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	// send ping
+	m.Write(ToArray([]string{"PING"}))
 	_, err = m.Read(buf)
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
@@ -222,6 +223,7 @@ func sendHandshakeToMaster() {
 
 	log.Println(string(buf))
 
+	// sending two replconf
 	m.Write(ToArray([]string{"replconf", "listening-port", strconv.Itoa(serverConfig.ListeningPort)}))
 	_, err = m.Read(buf)
 	if err != nil {
@@ -231,6 +233,15 @@ func sendHandshakeToMaster() {
 	log.Println(string(buf))
 
 	m.Write(ToArray([]string{"replconf", "capa", "psync2"}))
+	_, err = m.Read(buf)
+	if err != nil {
+		log.Fatalf("couldn't read response from master replica")
+	}
+
+	log.Println(string(buf))
+
+	// send psync
+	m.Write(ToArray([]string{"psync", "?", "-1"}))
 	_, err = m.Read(buf)
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
