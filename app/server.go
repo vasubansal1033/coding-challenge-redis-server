@@ -6,8 +6,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const (
@@ -121,6 +123,15 @@ func handleEcho(cmd Command) []byte {
 func handleSet(cmd Command) []byte {
 	fmt.Println("handle set")
 	kvStore[cmd.args[0]] = cmd.args[1]
+
+	if len(cmd.args) > 2 && strings.ToUpper(cmd.args[2]) == "PX" {
+		if expiry, err := strconv.Atoi(cmd.args[3]); err == nil {
+			go func(key string, duration int) {
+				time.Sleep(time.Duration(duration) * time.Millisecond)
+				delete(kvStore, key)
+			}(cmd.args[0], expiry)
+		}
+	}
 
 	return ToBulkString("OK")
 }
