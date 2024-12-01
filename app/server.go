@@ -33,6 +33,8 @@ type ServerConfig struct {
 	Role                string `json:"role"`
 	MasterReplicaId     string `json:"masterReplicaId"`
 	MasterReplicaOffset int    `json:"masterReplicaOffset"`
+	MasterHost          string `json:masterHost`
+	MasterPort          int    `json:"masterPort"`
 }
 
 var serverConfig = ServerConfig{
@@ -91,6 +93,17 @@ func main() {
 
 	if *masterAddress != "" {
 		serverConfig.Role = "slave"
+
+		masterAddr := strings.Split(*masterAddress, " ")
+		serverConfig.MasterHost = masterAddr[0]
+
+		masterPort, err := strconv.Atoi(masterAddr[1])
+		if err != nil {
+			logAndThrowError(err, fmt.Sprintf("Invalid master address %s", *masterAddress))
+		}
+
+		serverConfig.MasterPort = masterPort
+		sendHandshakeToMaster()
 	}
 
 	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, *redisPort)
@@ -187,4 +200,14 @@ func generateRandomString(length int) string {
 	}
 
 	return string(result)
+}
+
+func sendHandshakeToMaster() {
+	address := fmt.Sprintf("%s:%d", serverConfig.MasterHost, serverConfig.MasterPort)
+	m, err := net.Dial("tcp", address)
+	if err != nil {
+		log.Fatalln("couldn't connect to master at ", address)
+	}
+
+	m.Write([]byte("*1\r\n$4\r\nPING\r\n"))
 }
