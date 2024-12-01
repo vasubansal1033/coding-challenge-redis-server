@@ -35,6 +35,7 @@ type ServerConfig struct {
 	MasterReplicaOffset int    `json:"masterReplicaOffset"`
 	MasterHost          string `json:masterHost`
 	MasterPort          int    `json:"masterPort"`
+	ListeningPort       int    `json:"listeningPort"`
 }
 
 var serverConfig = ServerConfig{
@@ -90,6 +91,8 @@ func main() {
 	redisPort := flag.Int("port", REDIS_PORT, "port on which redis server will run")
 	masterAddress := flag.String("replicaof", "", "address and port of master replica")
 	flag.Parse()
+
+	serverConfig.ListeningPort = *redisPort
 
 	if *masterAddress != "" {
 		serverConfig.Role = "slave"
@@ -209,5 +212,29 @@ func sendHandshakeToMaster() {
 		log.Fatalln("couldn't connect to master at ", address)
 	}
 
+	buf := make([]byte, 1024)
+
 	m.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	_, err = m.Read(buf)
+	if err != nil {
+		log.Fatalf("couldn't read response from master replica")
+	}
+
+	log.Println(string(buf))
+
+	m.Write(ToArray([]string{"replconf", "listening-port", strconv.Itoa(serverConfig.ListeningPort)}))
+	_, err = m.Read(buf)
+	if err != nil {
+		log.Fatalf("couldn't read response from master replica")
+	}
+
+	log.Println(string(buf))
+
+	m.Write(ToArray([]string{"replconf", "capa", "psync2"}))
+	_, err = m.Read(buf)
+	if err != nil {
+		log.Fatalf("couldn't read response from master replica")
+	}
+
+	log.Println(string(buf))
 }

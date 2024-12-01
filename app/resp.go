@@ -136,3 +136,12 @@ func ToBulkString(data string) []byte {
 	bulkString := fmt.Sprintf("$%d\r\n%s\r\n", len, data)
 	return []byte(bulkString)
 }
+
+func ToArray(data []string) []byte {
+	result := []byte(fmt.Sprintf("*%d\r\n", len(data)))
+	for _, arg := range data {
+		result = append(result, ToBulkString(arg)...)
+	}
+
+	return result
+}
