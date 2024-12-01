@@ -27,6 +27,14 @@ var handlers = map[string]func(Command) []byte{
 	"INFO": handleInfo,
 }
 
+type ServerConfig struct {
+	Role string `json:"role"`
+}
+
+var serverConfig = ServerConfig{
+	Role: "master",
+}
+
 var kvStore map[string]string = make(map[string]string)
 
 func handleConnection(c net.Conn) {
@@ -78,7 +86,12 @@ func handleConnection(c net.Conn) {
 func main() {
 
 	redisPort := flag.Int("port", REDIS_PORT, "port on which redis server will run")
+	masterAddress := flag.String("replicaof", "", "address and port of master replica")
 	flag.Parse()
+
+	if *masterAddress != "" {
+		serverConfig.Role = "slave"
+	}
 
 	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, *redisPort)
 	l, err := net.Listen("tcp", listenAddress)
@@ -157,7 +170,7 @@ func handleInfo(cmd Command) []byte {
 	fmt.Println("handle info")
 
 	if cmd.args[0] == "replication" {
-		return ToBulkString("role:master")
+		return ToBulkString(fmt.Sprintf("role:%s", serverConfig.Role))
 	}
 
 	return ToBulkString("unsupported argument")
