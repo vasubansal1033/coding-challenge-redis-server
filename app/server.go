@@ -33,6 +33,8 @@ var handlers = map[string]func(net.Conn, Command){
 	"PSYNC":    handlePsync,
 }
 
+var slaveNodePortConnectionMap map[int]net.Conn = make(map[int]net.Conn)
+
 type ServerConfig struct {
 	Role                string `json:"role"`
 	MasterReplicaId     string `json:"masterReplicaId"`
@@ -178,6 +180,20 @@ func handleSet(conn net.Conn, cmd Command) {
 
 	response := ToSimpleString("OK")
 	conn.Write(response)
+
+	for slavePort, slaveConnection := range slaveNodePortConnectionMap {
+		replicateToSlaveNode(slavePort, cmd, slaveConnection)
+	}
+}
+
+func replicateToSlaveNode(slavePort int, cmd Command, conn net.Conn) {
+	commandArray := []string{}
+	commandArray = append(commandArray, cmd.name)
+	for _, command := range cmd.args {
+		commandArray = append(commandArray, command)
+	}
+
+	conn.Write(ToArray(commandArray))
 }
 
 func handleGet(conn net.Conn, cmd Command) {
@@ -213,6 +229,15 @@ func handleInfo(conn net.Conn, cmd Command) {
 
 func handleReplConf(conn net.Conn, cmd Command) {
 	fmt.Println("handle replconf")
+
+	if cmd.args[0] == "listening-port" {
+		port, err := strconv.Atoi(cmd.args[1])
+		if err != nil {
+			log.Printf("invalid port in replconf: %v", cmd.args[1])
+		} else {
+			slaveNodePortConnectionMap[port] = conn
+		}
+	}
 
 	response := ToSimpleString("OK")
 	conn.Write(response)
