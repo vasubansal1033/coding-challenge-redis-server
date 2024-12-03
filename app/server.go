@@ -33,6 +33,10 @@ var handlers = map[string]func(net.Conn, Command){
 	"PSYNC":    handlePsync,
 }
 
+var isWrite = map[string]bool{
+	"SET": true,
+}
+
 var slaveNodePortConnectionMap map[int]net.Conn = make(map[int]net.Conn)
 
 type ServerConfig struct {
@@ -88,8 +92,13 @@ func handleConnection(c net.Conn) {
 		}
 
 		commandHandler(c, *command)
-	}
 
+		if isWrite[command.name] {
+			for slavePort, slaveConnection := range slaveNodePortConnectionMap {
+				replicateToSlaveNode(slavePort, *command, slaveConnection)
+			}
+		}
+	}
 }
 
 func main() {
@@ -180,20 +189,6 @@ func handleSet(conn net.Conn, cmd Command) {
 
 	response := ToSimpleString("OK")
 	conn.Write(response)
-
-	for slavePort, slaveConnection := range slaveNodePortConnectionMap {
-		replicateToSlaveNode(slavePort, cmd, slaveConnection)
-	}
-}
-
-func replicateToSlaveNode(slavePort int, cmd Command, conn net.Conn) {
-	commandArray := []string{}
-	commandArray = append(commandArray, cmd.name)
-	for _, command := range cmd.args {
-		commandArray = append(commandArray, command)
-	}
-
-	conn.Write(ToArray(commandArray))
 }
 
 func handleGet(conn net.Conn, cmd Command) {
@@ -309,4 +304,14 @@ func sendHandshakeToMaster() {
 	}
 
 	log.Println(string(buf))
+}
+
+func replicateToSlaveNode(slavePort int, cmd Command, conn net.Conn) {
+	commandArray := []string{}
+	commandArray = append(commandArray, cmd.name)
+	for _, command := range cmd.args {
+		commandArray = append(commandArray, command)
+	}
+
+	conn.Write(ToArray(commandArray))
 }
