@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -19,9 +20,10 @@ const (
 	REDIS_PORT       = 6379
 	REDIS_CLI_PROMPT = "$ redis-cli > "
 	ALPHANUMERIC_SET = "abcdefghijklmnopqrstuvwxyz0123456789"
+	EMPTY_RDB_HEX    = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
 )
 
-var handlers = map[string]func(Command) []byte{
+var handlers = map[string]func(net.Conn, Command){
 	"PING":     handlePing,
 	"ECHO":     handleEcho,
 	"GET":      handleGet,
@@ -82,8 +84,8 @@ func handleConnection(c net.Conn) {
 			c.Write([]byte("+PONG\r\n"))
 			continue
 		}
-		response := commandHandler(*command)
-		c.Write(response)
+
+		commandHandler(c, *command)
 	}
 
 }
@@ -147,17 +149,21 @@ func isConnectionResetError(err error) bool {
 	return false
 }
 
-func handlePing(cmd Command) []byte {
+func handlePing(conn net.Conn, cmd Command) {
 	fmt.Println("handle ping")
-	return []byte("+PONG\r\n")
+	response := []byte("+PONG\r\n")
+
+	conn.Write(response)
 }
 
-func handleEcho(cmd Command) []byte {
+func handleEcho(conn net.Conn, cmd Command) {
 	fmt.Println("handle echo")
-	return ToBulkString(cmd.args[0])
+	response := ToBulkString(cmd.args[0])
+
+	conn.Write(response)
 }
 
-func handleSet(cmd Command) []byte {
+func handleSet(conn net.Conn, cmd Command) {
 	fmt.Println("handle set")
 	kvStore[cmd.args[0]] = cmd.args[1]
 
@@ -170,43 +176,59 @@ func handleSet(cmd Command) []byte {
 		}
 	}
 
-	return ToSimpleString("OK")
+	response := ToSimpleString("OK")
+	conn.Write(response)
 }
 
-func handleGet(cmd Command) []byte {
+func handleGet(conn net.Conn, cmd Command) {
 	fmt.Println("handle get")
 
 	val, ok := kvStore[cmd.args[0]]
+
+	var response []byte
 	if !ok {
-		return []byte("$-1\r\n")
+		response = []byte("$-1\r\n")
+	} else {
+		response = ToBulkString(val)
 	}
 
-	return ToBulkString(val)
+	conn.Write(response)
 }
 
-func handleInfo(cmd Command) []byte {
+func handleInfo(conn net.Conn, cmd Command) {
 	fmt.Println("handle info")
 
+	var response []byte
 	if cmd.args[0] == "replication" {
 		infoOutput := fmt.Sprintf("role:%s", serverConfig.Role)
 		infoOutput += fmt.Sprintf(":master_replid:%s", serverConfig.MasterReplicaId)
 		infoOutput += fmt.Sprintf(":master_repl_offset:%d", serverConfig.MasterReplicaOffset)
-		return ToBulkString(infoOutput)
+		response = ToBulkString(infoOutput)
+	} else {
+		response = ToBulkString("unsupported argument")
 	}
 
-	return ToBulkString("unsupported argument")
+	conn.Write(response)
 }
 
-func handleReplConf(cmd Command) []byte {
+func handleReplConf(conn net.Conn, cmd Command) {
 	fmt.Println("handle replconf")
 
-	return ToSimpleString("OK")
+	response := ToSimpleString("OK")
+	conn.Write(response)
 }
 
-func handlePsync(cmd Command) []byte {
+func handlePsync(conn net.Conn, cmd Command) {
 	fmt.Println("handle psync")
 
-	return []byte(ToSimpleString(fmt.Sprintf("FULLRESYNC %s %d", serverConfig.MasterReplicaId, serverConfig.MasterReplicaOffset)))
+	response := []byte(ToSimpleString(fmt.Sprintf("FULLRESYNC %s %d", serverConfig.MasterReplicaId, serverConfig.MasterReplicaOffset)))
+	conn.Write(response)
+
+	decodedHex, err := hex.DecodeString(EMPTY_RDB_HEX)
+	if err == nil {
+		response := append([]byte(fmt.Sprintf("$%d\r\n", len(decodedHex))), decodedHex...)
+		conn.Write(response)
+	}
 }
 
 func generateRandomString(length int) string {
