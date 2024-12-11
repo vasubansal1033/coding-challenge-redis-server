@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -109,6 +110,12 @@ func main() {
 
 	serverConfig.ListeningPort = *redisPort
 
+	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, *redisPort)
+	l, err := net.Listen("tcp", listenAddress)
+	if err != nil {
+		logAndThrowError(err, fmt.Sprintf("Failed to bind to port: %d", *redisPort))
+	}
+
 	if *masterAddress != "" {
 		serverConfig.Role = "slave"
 
@@ -121,13 +128,7 @@ func main() {
 		}
 
 		serverConfig.MasterPort = masterPort
-		sendHandshakeToMaster()
-	}
-
-	listenAddress := fmt.Sprintf("%s:%d", REDIS_HOST, *redisPort)
-	l, err := net.Listen("tcp", listenAddress)
-	if err != nil {
-		logAndThrowError(err, fmt.Sprintf("Failed to bind to port: %d", *redisPort))
+		go sendHandshakeToMaster()
 	}
 
 	log.Printf("Listening on port: %d", *redisPort)
@@ -175,7 +176,7 @@ func handleEcho(conn net.Conn, cmd Command) {
 }
 
 func handleSet(conn net.Conn, cmd Command) {
-	fmt.Println("handle set")
+	fmt.Println("handle set", cmd.args[0], cmd.args[1])
 	kvStore[cmd.args[0]] = cmd.args[1]
 
 	if len(cmd.args) > 2 && strings.ToUpper(cmd.args[2]) == "PX" {
@@ -187,8 +188,24 @@ func handleSet(conn net.Conn, cmd Command) {
 		}
 	}
 
-	response := ToSimpleString("OK")
-	conn.Write(response)
+	// Parse the remote address into a *net.TCPAddr
+	remoteAddr := conn.RemoteAddr().String()
+	remoteTCPAddr, err := net.ResolveTCPAddr("tcp", remoteAddr)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	targetTCPAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%v:%v", serverConfig.MasterHost, serverConfig.MasterPort))
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	fromMaster := remoteTCPAddr.Port == targetTCPAddr.Port
+
+	if !fromMaster {
+		response := ToSimpleString("OK")
+		conn.Write(response)
+	}
 }
 
 func handleGet(conn net.Conn, cmd Command) {
@@ -261,49 +278,85 @@ func generateRandomString(length int) string {
 	return string(result)
 }
 
-func sendHandshakeToMaster() {
+func sendHandshakeToMaster() net.Conn {
 	address := fmt.Sprintf("%s:%d", serverConfig.MasterHost, serverConfig.MasterPort)
 	m, err := net.Dial("tcp", address)
 	if err != nil {
 		log.Fatalln("couldn't connect to master at ", address)
 	}
 
-	buf := make([]byte, 1024)
+	buffReader := bufio.NewReader(m)
 
 	// send ping
 	m.Write(ToArray([]string{"PING"}))
-	_, err = m.Read(buf)
+
+	resp, err := buffReader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println(string(buf))
+	log.Println("[ping ack from master] " + string(resp))
 
 	// sending two replconf
 	m.Write(ToArray([]string{"replconf", "listening-port", strconv.Itoa(serverConfig.ListeningPort)}))
-	_, err = m.Read(buf)
+
+	resp, err = buffReader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println(string(buf))
+	log.Println("[replconf1 ack from master] " + resp)
 
 	m.Write(ToArray([]string{"replconf", "capa", "psync2"}))
-	_, err = m.Read(buf)
+
+	resp, err = buffReader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println(string(buf))
+	log.Printf("[replconf2 ack from master] %v\n", resp)
 
 	// send psync
 	m.Write(ToArray([]string{"psync", "?", "-1"}))
-	_, err = m.Read(buf)
+
+	resp, err = buffReader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println(string(buf))
+	log.Printf("[psync ack from master] %q\n", resp)
+
+	_, fullResyncSimpleStringResp := ReadNextRESP([]byte(resp))
+	fullResyncSimpleStringArgs := strings.Split(string(fullResyncSimpleStringResp.Data), " ")
+
+	serverConfig.MasterReplicaId = fullResyncSimpleStringArgs[1]
+	serverConfig.MasterReplicaOffset, err = strconv.Atoi(fullResyncSimpleStringArgs[2])
+	if err != nil {
+		log.Fatalf("Invalid offset sent in fullresync by master")
+	}
+
+	resp, err = buffReader.ReadString('\n')
+	if err != nil {
+		log.Fatalf("couldn't read response from master replica")
+	}
+
+	lengthOfRdb := getLength(resp)
+
+	rdbContent := make([]byte, lengthOfRdb)
+	io.ReadFull(buffReader, rdbContent)
+
+	// consume pipelined set commands
+	for {
+		command := ReadCommandArrayFromBuffer(buffReader)
+		if command == nil {
+			break
+		}
+
+		commandHandler := handlers[strings.ToUpper(command.name)]
+		commandHandler(m, *command)
+	}
+
+	return m
 }
 
 func replicateToSlaveNode(slavePort int, cmd Command, conn net.Conn) {

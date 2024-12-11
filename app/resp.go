@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"strconv"
 )
 
@@ -30,6 +32,7 @@ type Command struct {
 }
 
 func ReadNextRESP(b []byte) (n int, resp RESP) {
+
 	if len(b) == 0 {
 		return 0, RESP{} // no data to read
 	}
@@ -78,6 +81,7 @@ func ReadNextRESP(b []byte) (n int, resp RESP) {
 		}
 		return len(resp.Raw), resp
 	case String:
+		return len(resp.Raw), resp
 	case Error:
 		return len(resp.Raw), resp
 	}
@@ -148,4 +152,47 @@ func ToArray(data []string) []byte {
 func ToSimpleString(data string) []byte {
 	simpleString := fmt.Sprintf("+%s\r\n", data)
 	return []byte(simpleString)
+}
+
+func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) *Command {
+	arrayString := ""
+
+	arrayLength, err := buffReader.ReadString('\n')
+	if err != nil {
+		return nil
+	}
+
+	arrayString += arrayLength
+
+	l := getLength(arrayLength)
+	for i := 0; i < l; i++ {
+		len, _ := buffReader.ReadString('\n')
+		key, _ := buffReader.ReadString('\n')
+
+		arrayString = arrayString + len + key
+	}
+
+	log.Printf("[debug1] %q", arrayString)
+
+	return ReadNextCommand([]byte(arrayString))
+}
+
+func getLength(s string) int {
+	i := 1
+	num := []byte{}
+	for {
+		if s[i] >= '0' && s[i] <= '9' {
+			num = append(num, s[i])
+			i++
+		} else {
+			break
+		}
+	}
+
+	l, err := strconv.Atoi(string(num))
+	if err != nil {
+		log.Fatalf("Invalid number as RDB length")
+	}
+
+	return l
 }
