@@ -172,8 +172,6 @@ func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) *Command {
 		arrayString = arrayString + len + key
 	}
 
-	log.Printf("[debug1] %q", arrayString)
-
 	return ReadNextCommand([]byte(arrayString))
 }
 
