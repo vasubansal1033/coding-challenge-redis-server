@@ -162,21 +162,18 @@ func isConnectionResetError(err error) bool {
 }
 
 func handlePing(conn net.Conn, cmd Command) {
-	fmt.Println("handle ping")
 	response := []byte("+PONG\r\n")
 
 	conn.Write(response)
 }
 
 func handleEcho(conn net.Conn, cmd Command) {
-	fmt.Println("handle echo")
 	response := ToBulkString(cmd.args[0])
 
 	conn.Write(response)
 }
 
 func handleSet(conn net.Conn, cmd Command) {
-	fmt.Println("handle set", cmd.args[0], cmd.args[1])
 	kvStore[cmd.args[0]] = cmd.args[1]
 
 	if len(cmd.args) > 2 && strings.ToUpper(cmd.args[2]) == "PX" {
@@ -209,8 +206,6 @@ func handleSet(conn net.Conn, cmd Command) {
 }
 
 func handleGet(conn net.Conn, cmd Command) {
-	fmt.Println("handle get")
-
 	val, ok := kvStore[cmd.args[0]]
 
 	var response []byte
@@ -224,8 +219,6 @@ func handleGet(conn net.Conn, cmd Command) {
 }
 
 func handleInfo(conn net.Conn, cmd Command) {
-	fmt.Println("handle info")
-
 	var response []byte
 	if cmd.args[0] == "replication" {
 		infoOutput := fmt.Sprintf("role:%s", serverConfig.Role)
@@ -240,24 +233,30 @@ func handleInfo(conn net.Conn, cmd Command) {
 }
 
 func handleReplConf(conn net.Conn, cmd Command) {
-	fmt.Println("handle replconf")
 
-	if cmd.args[0] == "listening-port" {
+	response := []byte{}
+	switch cmd.args[0] {
+	case "listening-port":
 		port, err := strconv.Atoi(cmd.args[1])
 		if err != nil {
 			log.Printf("invalid port in replconf: %v", cmd.args[1])
 		} else {
 			slaveNodePortConnectionMap[port] = conn
 		}
+		response = ToSimpleString("OK")
+
+	case "GETACK":
+		offset := 0
+		response = ToArray([]string{"REPLCONF", "ACK", strconv.Itoa(offset)})
+
+	case "capa":
+		response = ToSimpleString("OK")
 	}
 
-	response := ToSimpleString("OK")
 	conn.Write(response)
 }
 
 func handlePsync(conn net.Conn, cmd Command) {
-	fmt.Println("handle psync")
-
 	response := []byte(ToSimpleString(fmt.Sprintf("FULLRESYNC %s %d", serverConfig.MasterReplicaId, serverConfig.MasterReplicaOffset)))
 	conn.Write(response)
 
@@ -295,8 +294,6 @@ func sendHandshakeToMaster() net.Conn {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println("[ping ack from master] " + string(resp))
-
 	// sending two replconf
 	m.Write(ToArray([]string{"replconf", "listening-port", strconv.Itoa(serverConfig.ListeningPort)}))
 
@@ -305,16 +302,12 @@ func sendHandshakeToMaster() net.Conn {
 		log.Fatalf("couldn't read response from master replica")
 	}
 
-	log.Println("[replconf1 ack from master] " + resp)
-
 	m.Write(ToArray([]string{"replconf", "capa", "psync2"}))
 
 	resp, err = buffReader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
-
-	log.Printf("[replconf2 ack from master] %v\n", resp)
 
 	// send psync
 	m.Write(ToArray([]string{"psync", "?", "-1"}))
@@ -323,8 +316,6 @@ func sendHandshakeToMaster() net.Conn {
 	if err != nil {
 		log.Fatalf("couldn't read response from master replica")
 	}
-
-	log.Printf("[psync ack from master] %q\n", resp)
 
 	_, fullResyncSimpleStringResp := ReadNextRESP([]byte(resp))
 	fullResyncSimpleStringArgs := strings.Split(string(fullResyncSimpleStringResp.Data), " ")
