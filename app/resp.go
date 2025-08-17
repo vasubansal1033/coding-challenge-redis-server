@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"strconv"
 )
 
@@ -178,7 +177,7 @@ func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) *Command {
 func getLength(s string) int {
 	i := 1
 	num := []byte{}
-	for {
+	for i < len(s) {
 		if s[i] >= '0' && s[i] <= '9' {
 			num = append(num, s[i])
 			i++
@@ -189,7 +188,7 @@ func getLength(s string) int {
 
 	l, err := strconv.Atoi(string(num))
 	if err != nil {
-		log.Fatalf("Invalid number as RDB length")
+		return 0 // Return 0 instead of fatal error
 	}
 
 	return l
