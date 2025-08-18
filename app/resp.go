@@ -153,25 +153,29 @@ func ToSimpleString(data string) []byte {
 	return []byte(simpleString)
 }
 
-func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) *Command {
+func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) (*Command, int) {
 	arrayString := ""
+	commandBytesProcessed := 0
 
 	arrayLength, err := buffReader.ReadString('\n')
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 
 	arrayString += arrayLength
-
+	commandBytesProcessed += len(arrayLength)
 	l := getLength(arrayLength)
 	for i := 0; i < l; i++ {
-		len, _ := buffReader.ReadString('\n')
-		key, _ := buffReader.ReadString('\n')
+		l, _ := buffReader.ReadString('\n')
+		k, _ := buffReader.ReadString('\n')
 
-		arrayString = arrayString + len + key
+		commandBytesProcessed += len(l)
+		commandBytesProcessed += len(k)
+
+		arrayString = arrayString + l + k
 	}
 
-	return ReadNextCommand([]byte(arrayString))
+	return ReadNextCommand([]byte(arrayString)), commandBytesProcessed
 }
 
 func getLength(s string) int {

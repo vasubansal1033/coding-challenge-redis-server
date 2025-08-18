@@ -299,7 +299,8 @@ func (rm *RedisReplicationManager) handleMasterCommands(conn net.Conn) {
 	buffReader := bufio.NewReader(conn)
 
 	for {
-		command := ReadCommandArrayFromBuffer(buffReader)
+		command, commandBytesProcessed := ReadCommandArrayFromBuffer(buffReader)
+
 		if command == nil {
 			rm.logger.Info("Master connection closed")
 			break
@@ -334,7 +335,7 @@ func (rm *RedisReplicationManager) handleMasterCommands(conn net.Conn) {
 		}
 
 		// Update byte offset
-		rm.byteOffset += len(command.name) + len(strings.Join(command.args, " "))
+		rm.SetByteOffset(rm.GetByteOffset() + commandBytesProcessed)
 	}
 }
 
@@ -343,7 +344,8 @@ func (rm *RedisReplicationManager) handleMasterCommandsWithReader(conn net.Conn,
 	defer conn.Close()
 
 	for {
-		command := ReadCommandArrayFromBuffer(buffReader)
+		command, commandBytesProcessed := ReadCommandArrayFromBuffer(buffReader)
+
 		if command == nil {
 			rm.logger.Info("Master connection closed")
 			break
@@ -378,7 +380,7 @@ func (rm *RedisReplicationManager) handleMasterCommandsWithReader(conn net.Conn,
 		}
 
 		// Update byte offset
-		rm.byteOffset += len(command.name) + len(strings.Join(command.args, " "))
+		rm.SetByteOffset(rm.GetByteOffset() + commandBytesProcessed)
 	}
 }
 
