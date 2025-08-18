@@ -153,6 +153,11 @@ func ToSimpleString(data string) []byte {
 	return []byte(simpleString)
 }
 
+func ToInteger(data int) []byte {
+	integer := fmt.Sprintf(":%d\r\n", data)
+	return []byte(integer)
+}
+
 func ReadCommandArrayFromBuffer(buffReader *bufio.Reader) (*Command, int) {
 	arrayString := ""
 	commandBytesProcessed := 0

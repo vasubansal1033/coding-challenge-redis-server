@@ -51,6 +51,8 @@ func (h *RedisCommandHandler) Handle(conn net.Conn, cmd Command) error {
 		return h.handleReplConf(conn, cmd)
 	case "PSYNC":
 		return h.handlePsync(conn, cmd)
+	case "WAIT":
+		return h.handleWait(conn, cmd)
 	default:
 		h.logger.Error("Unknown command: %s", commandName)
 		return h.writeResponse(conn, ToSimpleString("PONG"))
@@ -60,7 +62,7 @@ func (h *RedisCommandHandler) Handle(conn net.Conn, cmd Command) error {
 // CanHandle checks if this handler can process the given command
 func (h *RedisCommandHandler) CanHandle(commandName string) bool {
 	commandName = strings.ToUpper(commandName)
-	supportedCommands := []string{"PING", "ECHO", "GET", "SET", "INFO", "REPLCONF", "PSYNC"}
+	supportedCommands := []string{"PING", "ECHO", "GET", "SET", "INFO", "REPLCONF", "PSYNC", "WAIT"}
 
 	for _, cmd := range supportedCommands {
 		if cmd == commandName {
@@ -216,6 +218,15 @@ func (h *RedisCommandHandler) handlePsync(conn net.Conn, cmd Command) error {
 
 	rdbResponse := append([]byte(fmt.Sprintf("$%d\r\n", len(decodedHex))), decodedHex...)
 	return h.writeResponse(conn, rdbResponse)
+}
+
+func (h *RedisCommandHandler) handleWait(conn net.Conn, cmd Command) error {
+	if len(cmd.args) < 2 {
+		return h.writeResponse(conn, ToSimpleString("ERR wrong number of arguments"))
+	}
+
+	response := ToInteger(0)
+	return h.writeResponse(conn, response)
 }
 
 func (h *RedisCommandHandler) writeResponse(conn net.Conn, response []byte) error {
