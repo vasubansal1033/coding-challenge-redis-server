@@ -225,7 +225,9 @@ func (h *RedisCommandHandler) handleWait(conn net.Conn, cmd Command) error {
 		return h.writeResponse(conn, ToSimpleString("ERR wrong number of arguments"))
 	}
 
-	response := ToInteger(0)
+	connectedSlaves := h.replicationManager.GetConnectedSlaves()
+	response := ToInteger(connectedSlaves)
+
 	return h.writeResponse(conn, response)
 }
 

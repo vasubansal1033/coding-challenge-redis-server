@@ -42,6 +42,7 @@ type CommandHandler interface {
 
 // ReplicationManager interface for master-slave replication
 type ReplicationManager interface {
+	GetConnectedSlaves() int
 	RegisterSlave(port int, conn net.Conn) error
 	ReplicateCommand(cmd Command) error
 	StartSlaveConnection() (net.Conn, error)

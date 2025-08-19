@@ -21,6 +21,13 @@ type RedisReplicationManager struct {
 	commandHandler   CommandHandler // Add command handler for processing master commands
 }
 
+func (rm *RedisReplicationManager) GetConnectedSlaves() int {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	return len(rm.slaveConnections)
+}
+
 // NewRedisReplicationManager creates a new replication manager
 func NewRedisReplicationManager(config *RedisServerConfig, logger Logger) *RedisReplicationManager {
 	return &RedisReplicationManager{
