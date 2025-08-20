@@ -15,15 +15,17 @@ type RedisCommandHandler struct {
 	config             *RedisServerConfig
 	replicationManager ReplicationManager
 	logger             Logger
+	commandHistory     *CommandHistory
 }
 
 // NewRedisCommandHandler creates a new command handler
-func NewRedisCommandHandler(kvStore KVStore, config *RedisServerConfig, replManager ReplicationManager, logger Logger) *RedisCommandHandler {
+func NewRedisCommandHandler(kvStore KVStore, config *RedisServerConfig, replManager ReplicationManager, logger Logger, commandHistory *CommandHistory) *RedisCommandHandler {
 	return &RedisCommandHandler{
 		kvStore:            kvStore,
 		config:             config,
 		replicationManager: replManager,
 		logger:             logger,
+		commandHistory:     commandHistory,
 	}
 }
 
@@ -35,6 +37,7 @@ var writeCommands = map[string]bool{
 // Handle processes a Redis command
 func (h *RedisCommandHandler) Handle(conn net.Conn, cmd Command) error {
 	commandName := strings.ToUpper(cmd.name)
+	defer h.commandHistory.AddCommand(cmd)
 
 	switch commandName {
 	case "PING":
@@ -189,7 +192,15 @@ func (h *RedisCommandHandler) handleReplConf(conn net.Conn, cmd Command) error {
 		response := ToArray([]string{"REPLCONF", "ACK", offset})
 		h.logger.Info("REPLCONF GETACK: response bytes: %v", response)
 		return h.writeResponse(conn, response)
+	case "ack":
+		// This is an ACK response from a slave to the master
+		h.logger.Info("Received REPLCONF ACK from slave: %v", cmd.args)
 
+		// Notify the replication manager about the ACK
+		h.replicationManager.NotifyAck(conn.RemoteAddr().String())
+
+		// Master should NOT respond to ACK - it's a one-way notification
+		return nil
 	case "capa":
 		return h.writeResponse(conn, ToSimpleString("OK"))
 
@@ -225,10 +236,34 @@ func (h *RedisCommandHandler) handleWait(conn net.Conn, cmd Command) error {
 		return h.writeResponse(conn, ToSimpleString("ERR wrong number of arguments"))
 	}
 
-	connectedSlaves := h.replicationManager.GetConnectedSlaves()
-	response := ToInteger(connectedSlaves)
+	minAckSlaves, err := strconv.Atoi(cmd.args[0])
+	if err != nil {
+		return h.writeResponse(conn, ToSimpleString("ERR invalid number of slaves"))
+	}
 
-	return h.writeResponse(conn, response)
+	waitTimeoutMs, err := strconv.Atoi(cmd.args[1])
+	if err != nil {
+		return h.writeResponse(conn, ToSimpleString("ERR invalid timeout"))
+	}
+
+	// Only masters can process WAIT commands
+	if h.config.Role != "master" {
+		return h.writeResponse(conn, ToSimpleString("ERR WAIT command can only be used on master"))
+	}
+
+	// Check if there were any write commands since the last WAIT
+	lastCommand := h.commandHistory.GetLastCommand()
+	if lastCommand.name == "" || !h.IsWriteCommand(lastCommand.name) {
+		// No write commands to wait for - return connected slaves count immediately
+		connectedSlaves := h.replicationManager.GetConnectedSlaves()
+		h.logger.Info("WAIT command with no pending writes - returning connected slaves: %d", connectedSlaves)
+		return h.writeResponse(conn, ToInteger(connectedSlaves))
+	}
+
+	ackedReplicas := h.replicationManager.WaitForSlaveAcknowledgments(minAckSlaves, waitTimeoutMs)
+	h.logger.Info("WAIT command completed: %d replicas acknowledged", ackedReplicas)
+
+	return h.writeResponse(conn, ToInteger(ackedReplicas))
 }
 
 func (h *RedisCommandHandler) writeResponse(conn net.Conn, response []byte) error {

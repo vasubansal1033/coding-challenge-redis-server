@@ -19,6 +19,7 @@ type RedisReplicationManager struct {
 	mu               sync.RWMutex
 	byteOffset       int
 	commandHandler   CommandHandler // Add command handler for processing master commands
+	ackChan          chan bool
 }
 
 func (rm *RedisReplicationManager) GetConnectedSlaves() int {
@@ -35,7 +36,8 @@ func NewRedisReplicationManager(config *RedisServerConfig, logger Logger) *Redis
 		logger:           logger,
 		slaveConnections: make(map[int]net.Conn),
 		byteOffset:       0,
-		commandHandler:   nil, // Will be set later
+		commandHandler:   nil, // Will be set later,
+		ackChan:          make(chan bool, 1),
 	}
 }
 
@@ -186,6 +188,59 @@ func (rm *RedisReplicationManager) performHandshake(conn net.Conn) error {
 
 	rm.logger.Info("Handshake completed successfully")
 	return nil
+}
+
+// WaitForSlaveAcknowledgments waits for a number of slaves to acknowledge a command
+func (rm *RedisReplicationManager) WaitForSlaveAcknowledgments(numSlaves int, timeoutMs int) int {
+	rm.mu.RLock()
+	connectedSlaves := len(rm.slaveConnections)
+	rm.mu.RUnlock()
+
+	if numSlaves > connectedSlaves {
+		numSlaves = connectedSlaves
+	}
+
+	// If no slaves requested or no slaves connected, return 0
+	if numSlaves == 0 || connectedSlaves == 0 {
+		return 0
+	}
+
+	replConfAckCommand := []string{"REPLCONF", "GETACK", "*"}
+
+	// Send REPLCONF GETACK to all slaves
+	rm.mu.RLock()
+	for port, conn := range rm.slaveConnections {
+		if err := rm.sendCommand(conn, replConfAckCommand); err != nil {
+			rm.logger.Error("Failed to send REPLCONF GETACK to slave on port %d: %v", port, err)
+			continue
+		}
+
+		rm.logger.Info("Sent REPLCONF GETACK to slave on port %d", port)
+	}
+	rm.mu.RUnlock()
+
+	// wait for all slaves to acknowledge or timeout
+	timeout := time.After(time.Duration(timeoutMs) * time.Millisecond)
+	numAcks := 0
+
+	rm.logger.Info("numSlaves: %d connectedSlaves: %d", numSlaves, connectedSlaves)
+	for {
+		select {
+		case ack := <-rm.ackChan:
+			rm.logger.Info("Received acknowledgment from slave")
+			if ack {
+				numAcks++
+			}
+
+			if numAcks >= numSlaves {
+				return numAcks
+			}
+
+		case <-timeout:
+			rm.logger.Info("WAIT command timed out after %dms", timeoutMs)
+			return numAcks
+		}
+	}
 }
 
 // performHandshakeWithReader performs handshake and returns the buffered reader for continued reading
@@ -412,6 +467,12 @@ func (rm *RedisReplicationManager) sendToSlave(port int, conn net.Conn, data []b
 		return err
 	}
 	return nil
+}
+
+// NotifyAck notifies that an ACK response was received from a slave
+func (rm *RedisReplicationManager) NotifyAck(slaveAddress string) {
+	rm.ackChan <- true
+	rm.logger.Info("ACK notification sent to ackChan for slave %s", slaveAddress)
 }
 
 // GetByteOffset returns the current byte offset for replication

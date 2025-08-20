@@ -45,8 +45,11 @@ func NewRedisServer() *RedisServerImpl {
 	// Initialize replication manager
 	replicationManager := NewRedisReplicationManager(config, logger)
 
+	// Initialize command history
+	commandHistory := NewCommandHistory()
+
 	// Initialize command handler
-	commandHandler := NewRedisCommandHandler(kvStore, config, replicationManager, logger)
+	commandHandler := NewRedisCommandHandler(kvStore, config, replicationManager, logger, commandHistory)
 
 	// Set the command handler on the replication manager so it can process master commands
 	replicationManager.SetCommandHandler(commandHandler)

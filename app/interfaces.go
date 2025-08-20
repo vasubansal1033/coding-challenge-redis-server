@@ -49,6 +49,8 @@ type ReplicationManager interface {
 	HandleMasterHandshake() error
 	GetByteOffset() int
 	SetCommandHandler(handler CommandHandler)
+	WaitForSlaveAcknowledgments(numSlaves int, timeoutMs int) int
+	NotifyAck(slaveAddress string)
 }
 
 // ConnectionManager interface for handling network connections
