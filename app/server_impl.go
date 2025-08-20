@@ -152,6 +152,16 @@ func (s *RedisServerImpl) SetPort(port int) {
 	s.configManager.SetPort(port)
 }
 
+// SetRDBDir sets the directory to save RDB files
+func (s *RedisServerImpl) SetRDBDir(dir string) {
+	s.configManager.SetRDBDir(dir)
+}
+
+// SetRDBFileName sets the file name to save RDB files
+func (s *RedisServerImpl) SetRDBFileName(fileName string) {
+	s.configManager.SetRDBFileName(fileName)
+}
+
 // SetAsSlave configures the server as a slave
 func (s *RedisServerImpl) SetAsSlave(masterHost string, masterPort int) {
 	s.configManager.SetAsSlave(masterHost, masterPort)

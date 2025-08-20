@@ -56,6 +56,8 @@ func (h *RedisCommandHandler) Handle(conn net.Conn, cmd Command) error {
 		return h.handlePsync(conn, cmd)
 	case "WAIT":
 		return h.handleWait(conn, cmd)
+	case "CONFIG":
+		return h.handleConfig(conn, cmd)
 	default:
 		h.logger.Error("Unknown command: %s", commandName)
 		return h.writeResponse(conn, ToSimpleString("PONG"))
@@ -65,7 +67,7 @@ func (h *RedisCommandHandler) Handle(conn net.Conn, cmd Command) error {
 // CanHandle checks if this handler can process the given command
 func (h *RedisCommandHandler) CanHandle(commandName string) bool {
 	commandName = strings.ToUpper(commandName)
-	supportedCommands := []string{"PING", "ECHO", "GET", "SET", "INFO", "REPLCONF", "PSYNC", "WAIT"}
+	supportedCommands := []string{"PING", "ECHO", "GET", "SET", "INFO", "REPLCONF", "PSYNC", "WAIT", "CONFIG"}
 
 	for _, cmd := range supportedCommands {
 		if cmd == commandName {
@@ -264,6 +266,26 @@ func (h *RedisCommandHandler) handleWait(conn net.Conn, cmd Command) error {
 	h.logger.Info("WAIT command completed: %d replicas acknowledged", ackedReplicas)
 
 	return h.writeResponse(conn, ToInteger(ackedReplicas))
+}
+
+func (h *RedisCommandHandler) handleConfig(conn net.Conn, cmd Command) error {
+	if len(cmd.args) < 2 {
+		return h.writeResponse(conn, ToSimpleString("ERR wrong number of arguments"))
+	}
+
+	switch strings.ToLower(cmd.args[0]) {
+	case "get":
+		switch strings.ToLower(cmd.args[1]) {
+		case "dir":
+			return h.writeResponse(conn, ToArray([]string{"dir", h.config.RDBDir}))
+		case "dbfilename":
+			return h.writeResponse(conn, ToArray([]string{"dbfilename", h.config.RDBFileName}))
+		default:
+			return h.writeResponse(conn, ToSimpleString("ERR unknown subcommand"))
+		}
+	default:
+		return h.writeResponse(conn, ToSimpleString("ERR unknown subcommand"))
+	}
 }
 
 func (h *RedisCommandHandler) writeResponse(conn net.Conn, response []byte) error {

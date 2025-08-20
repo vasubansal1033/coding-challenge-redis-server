@@ -30,6 +30,16 @@ func (cm *ConfigManager) SetPort(port int) {
 	cm.config.Port = port
 }
 
+// SetRDBDir sets the directory to save RDB files
+func (cm *ConfigManager) SetRDBDir(dir string) {
+	cm.config.RDBDir = dir
+}
+
+// SetRDBFileName sets the file name to save RDB files
+func (cm *ConfigManager) SetRDBFileName(fileName string) {
+	cm.config.RDBFileName = fileName
+}
+
 // SetAsSlave configures the server as a slave
 func (cm *ConfigManager) SetAsSlave(masterHost string, masterPort int) {
 	cm.config.Role = "slave"

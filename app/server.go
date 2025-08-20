@@ -17,6 +17,9 @@ func main() {
 	// Parse command line flags
 	redisPort := flag.Int("port", REDIS_PORT, "port on which redis server will run")
 	masterAddress := flag.String("replicaof", "", "address and port of master replica")
+	rdbDir := flag.String("dir", "", "directory to save RDB files")
+	rdbFileName := flag.String("dbfilename", "", "file name to save RDB files")
+
 	flag.Parse()
 
 	// Create and configure the Redis server
@@ -39,6 +42,11 @@ func main() {
 		}
 
 		server.SetAsSlave(masterHost, masterPort)
+	}
+
+	if *rdbDir != "" && *rdbFileName != "" {
+		server.SetRDBDir(*rdbDir)
+		server.SetRDBFileName(*rdbFileName)
 	}
 
 	// Create context for graceful shutdown

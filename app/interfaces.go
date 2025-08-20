@@ -23,6 +23,8 @@ type RedisServerConfig struct {
 	MasterPort          int
 	MasterReplicaID     string
 	MasterReplicaOffset int
+	RDBDir              string
+	RDBFileName         string
 }
 
 // KVStore interface for key-value storage operations
